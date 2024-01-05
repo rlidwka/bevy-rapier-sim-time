@@ -35,27 +35,27 @@ pub type PhysicsTime = Time<PhysicsTimeInner>;
 
 pub trait PhysicsTimeExt {
     fn pause(&mut self);
+    fn resume(&mut self);
     fn step(&mut self);
-    fn set_speed(&mut self, speed: f32);
-    fn run(&mut self);
+    fn run(&mut self, speed: f32);
 }
 
 impl PhysicsTimeExt for PhysicsTime {
     fn pause(&mut self) {
-        self.context_mut().mode = PhysicsTimeMode::Paused;
+        self.context_mut().set_mode(PhysicsTimeMode::Paused);
+    }
+
+    fn resume(&mut self) {
+        let old_mode = self.context().old_mode;
+        self.context_mut().set_mode(old_mode);
     }
 
     fn step(&mut self) {
-        self.context_mut().mode = PhysicsTimeMode::OneTick;
+        self.context_mut().set_mode(PhysicsTimeMode::OneTick);
     }
 
-    fn set_speed(&mut self, speed: f32) {
-        self.context_mut().speed = speed;
-        self.context_mut().overstep = Duration::ZERO;
-    }
-
-    fn run(&mut self) {
-        self.context_mut().mode = PhysicsTimeMode::Running;
+    fn run(&mut self, speed: f32) {
+        self.context_mut().set_mode(PhysicsTimeMode::Running { speed });
     }
 }
 
@@ -63,27 +63,42 @@ impl PhysicsTimeExt for PhysicsTime {
 #[reflect(Default)]
 pub struct PhysicsTimeInner {
     pub mode: PhysicsTimeMode,
+    old_mode: PhysicsTimeMode,
     pub timestep: Duration,
-    pub speed: f32,
     pub overstep: Duration,
+}
+
+impl PhysicsTimeInner {
+    pub fn set_mode(&mut self, mode: PhysicsTimeMode) {
+        if let PhysicsTimeMode::Running { .. } = mode {
+            self.old_mode = mode;
+        }
+        self.mode = mode;
+    }
 }
 
 impl Default for PhysicsTimeInner {
     fn default() -> Self {
         Self {
-            mode: PhysicsTimeMode::Running,
+            mode:     PhysicsTimeMode::default(),
+            old_mode: PhysicsTimeMode::default(),
             timestep: DEFAULT_TIMESTEP,
-            speed: 1.,
             overstep: Duration::ZERO,
         }
     }
 }
 
-#[derive(Debug, Clone, Copy, Reflect)]
+#[derive(Debug, Clone, Copy, PartialEq, Reflect)]
 pub enum PhysicsTimeMode {
     Paused,
     OneTick,
-    Running,
+    Running { speed: f32 },
+}
+
+impl Default for PhysicsTimeMode {
+    fn default() -> Self {
+        Self::Running { speed: 1. }
+    }
 }
 
 fn accumulate_time(time: &mut PhysicsTime, delta: Duration) {
@@ -91,11 +106,11 @@ fn accumulate_time(time: &mut PhysicsTime, delta: Duration) {
     match context.mode {
         PhysicsTimeMode::Paused => (),
         PhysicsTimeMode::OneTick => (),
-        PhysicsTimeMode::Running => {
-            if context.speed == std::f32::INFINITY {
+        PhysicsTimeMode::Running { speed } => {
+            if speed == std::f32::INFINITY {
                 context.overstep = Duration::MAX;
             } else {
-                context.overstep = context.overstep.saturating_add(delta.mul_f32(context.speed));
+                context.overstep = context.overstep.saturating_add(delta.mul_f32(speed));
             }
         }
     }
@@ -110,7 +125,7 @@ fn expend_time(time: &mut PhysicsTime) -> bool {
             context.overstep = Duration::ZERO;
             true
         }
-        PhysicsTimeMode::Running => {
+        PhysicsTimeMode::Running { speed: _ } => {
             if let Some(new_value) = context.overstep.checked_sub(context.timestep) {
                 context.overstep = new_value;
                 true

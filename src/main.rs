@@ -5,16 +5,14 @@ use bevy::input::common_conditions::input_toggle_active;
 use bevy::prelude::*;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier3d::prelude::*;
+use time::PhysicsTimeExt;
 
 mod camera;
 mod time;
 mod ui;
 
 #[derive(Event)]
-struct RestartEvent {
-    mode_after_restart: time::PhysicsTimeMode,
-    speed_after_restart: f32,
-}
+struct RestartEvent;
 
 fn main() {
     App::new()
@@ -66,10 +64,7 @@ fn spawn_scene(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut events: EventWriter<RestartEvent>,
 ) {
-    events.send(RestartEvent {
-        mode_after_restart: time::PhysicsTimeMode::Running,
-        speed_after_restart: 1.,
-    });
+    events.send(RestartEvent);
 
     // circular base
     commands.spawn((
@@ -116,11 +111,11 @@ fn reset_scene(
     mut materials: ResMut<Assets<StandardMaterial>>,
     mut balls: Query<Entity, With<Ball>>,
 ) {
-    let Some(event) = events.read().last() else { return; };
+    if events.is_empty() { return; }
+    events.clear();
 
     *time = time::PhysicsTime::default();
-    time.context_mut().mode = event.mode_after_restart;
-    time.context_mut().speed = event.speed_after_restart;
+    time.resume();
 
     for entity in balls.iter_mut() {
         commands.entity(entity).despawn();
