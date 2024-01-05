@@ -1,5 +1,7 @@
 This is an example project showcasing how to control the speed of a bevy rapier physics simulation.
 
+![image](https://github.com/rlidwka/bevy-rapier-sim-time/assets/999113/bed9e0c4-e35e-4732-8c72-63cd0b79bffb)
+
 With the provided interface, user can:
 
  - pause the simulation
